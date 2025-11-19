@@ -3,14 +3,15 @@ import { supabase } from '../lib/supabase';
 import { Appointment, User, Contract } from '../types';
 import { format, parseISO, isAfter, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, Clock, DollarSign, ArrowRight, Briefcase } from 'lucide-react';
+import { Calendar, Clock, DollarSign, ArrowRight, Briefcase, Plus } from 'lucide-react';
 
 interface HomeProps {
   user: User;
   onNavigate: (view: any) => void;
+  onQuickAction: () => void;
 }
 
-export const Home: React.FC<HomeProps> = ({ user, onNavigate }) => {
+export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) => {
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState({ contracts: 0, monthlyRevenue: 0 });
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,7 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate }) => {
   }, [user.id]);
 
   return (
-    <div className="w-full max-w-[1600px]">
+    <div className="w-full max-w-[1600px] pb-20">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800">Olá, {user.username}</h1>
         <p className="text-gray-500 mt-1">Aqui está o resumo da sua gestão hoje.</p>
@@ -138,6 +139,15 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate }) => {
             </div>
         )}
       </div>
+
+      {/* Floating Action Button */}
+      <button
+        onClick={onQuickAction}
+        className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-2xl shadow-primary-600/40 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center"
+        title="Novo Registro"
+      >
+        <Plus className="w-7 h-7" />
+      </button>
     </div>
   );
 };

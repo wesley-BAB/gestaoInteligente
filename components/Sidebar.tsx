@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, FileText, User, Settings, PieChart, Home, X, Leaf, Pin, PinOff, Users } from 'lucide-react';
+import { LogOut, FileText, User, Settings, PieChart, Home, X, Pin, PinOff, Users, FileSignature } from 'lucide-react';
 
 export type ViewType = 'home' | 'contracts' | 'clients' | 'users' | 'service-types' | 'revenue';
 
@@ -15,6 +15,12 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChangeView, isOpen, toggle, isPinned, onTogglePin }) => {
   
+  // Logic: Text is visible if Sidebar is Open (Mobile) OR Pinned (Desktop) OR Hovered (Desktop)
+  const getTextClass = () => {
+    if (isOpen) return 'opacity-100'; // Always show on mobile/open
+    return isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+  };
+
   const navItemClass = (view: ViewType) => `
     w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 font-medium whitespace-nowrap overflow-hidden relative
     ${activeView === view 
@@ -45,9 +51,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
         <div className="p-5 pb-4 flex flex-col items-center md:items-start transition-all">
           <div className="flex items-center gap-3 w-full overflow-hidden">
              <div className="h-10 w-10 min-w-[2.5rem] bg-primary-500 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/30 shrink-0">
-                 <Leaf className="text-white w-6 h-6" />
+                 <FileSignature className="text-white w-6 h-6" />
              </div>
-             <div className={`transition-opacity duration-300 whitespace-nowrap ${isPinned ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100 hidden md:block'}`}>
+             <div className={`transition-opacity duration-300 whitespace-nowrap ${getTextClass()}`}>
                 <h1 className="text-xl font-bold text-gray-800 tracking-tight leading-none">WES</h1>
                 <p className="text-[10px] text-primary-600 font-bold uppercase tracking-wider">Gestão</p>
              </div>
@@ -60,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
              {/* Desktop Pin Toggle */}
              <button 
                 onClick={onTogglePin} 
-                className={`hidden md:block ml-auto text-gray-400 hover:text-primary-500 transition-colors ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                className={`hidden md:block ml-auto text-gray-400 hover:text-primary-500 transition-colors ${getTextClass()}`}
                 title={isPinned ? "Desfixar menu" : "Fixar menu"}
              >
                 {isPinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
@@ -71,32 +77,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
         <nav className="flex-1 py-4 px-3 space-y-2 overflow-y-auto custom-scrollbar overflow-x-hidden">
           <button onClick={() => { onChangeView('home'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('home')} title="Início">
             <Home className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Início</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Início</span>
           </button>
           
           <button onClick={() => { onChangeView('contracts'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('contracts')} title="Contratos">
             <FileText className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Contratos & Avulsos</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Contratos & Avulsos</span>
           </button>
 
           <button onClick={() => { onChangeView('revenue'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('revenue')} title="Provisão">
             <PieChart className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Provisão Receita</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Provisão Receita</span>
           </button>
 
           <button onClick={() => { onChangeView('clients'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('clients')} title="Clientes">
             <Users className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Meus Clientes</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Meus Clientes</span>
           </button>
 
           <button onClick={() => { onChangeView('service-types'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('service-types')} title="Serviços">
             <Settings className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Tipos de Serviço</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Tipos de Serviço</span>
           </button>
           
           <button onClick={() => { onChangeView('users'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('users')} title="Usuários">
             <User className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Usuários do Sistema</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Usuários do Sistema</span>
           </button>
         </nav>
 
@@ -107,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
             title="Sair"
           >
             <LogOut className="w-6 h-6 min-w-[1.5rem] shrink-0" />
-            <span className={`transition-opacity duration-200 delay-75 ${isPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>Sair</span>
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Sair</span>
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { hashPassword } from '../lib/crypto';
 import { User } from '../types';
-import { Lock, User as UserIcon, Loader2, ArrowRight, Leaf } from 'lucide-react';
+import { Lock, User as UserIcon, Loader2, ArrowRight, FileSignature } from 'lucide-react';
 import { useToast } from './ToastContext';
 
 interface LoginProps {
@@ -65,7 +65,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           <div className="p-8 sm:p-10">
             <div className="text-center mb-10">
               <div className="h-16 w-16 bg-gradient-to-br from-primary-400 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-200 transform rotate-3">
-                 <Leaf className="text-white w-8 h-8" />
+                 <FileSignature className="text-white w-8 h-8" />
               </div>
               <h1 className="text-2xl font-bold text-gray-800 tracking-tight">WES</h1>
               <p className="text-primary-600 font-medium text-sm tracking-widest uppercase mt-1">Gestão Inteligente</p>

@@ -20,6 +20,9 @@ const App: React.FC = () => {
   const [initializing, setInitializing] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
+  
+  // State to handle "Quick Add" from Home or Revenue screens
+  const [autoOpenContractModal, setAutoOpenContractModal] = useState(false);
 
   useEffect(() => {
     const storedSession = localStorage.getItem(SESSION_KEY);
@@ -55,6 +58,12 @@ const App: React.FC = () => {
       const newState = !isSidebarPinned;
       setIsSidebarPinned(newState);
       localStorage.setItem(SIDEBAR_PIN_KEY, String(newState));
+  }
+
+  // Function used by Home and Revenue screens to go to Contracts and open Modal
+  const handleQuickNewContract = () => {
+      setActiveView('contracts');
+      setAutoOpenContractModal(true);
   }
 
   if (initializing) {
@@ -97,11 +106,28 @@ const App: React.FC = () => {
           </div>
 
           <main className="flex-1 p-4 md:p-8">
-              {activeView === 'home' && <Home user={user} onNavigate={setActiveView} />}
-              {activeView === 'contracts' && <ContractList user={user} />}
+              {activeView === 'home' && (
+                  <Home 
+                    user={user} 
+                    onNavigate={setActiveView} 
+                    onQuickAction={handleQuickNewContract} 
+                  />
+              )}
+              {activeView === 'contracts' && (
+                  <ContractList 
+                    user={user} 
+                    autoOpenModal={autoOpenContractModal}
+                    onModalProcessed={() => setAutoOpenContractModal(false)}
+                  />
+              )}
               {activeView === 'clients' && <ClientList user={user} />}
               {activeView === 'service-types' && <ServiceTypeList />}
-              {activeView === 'revenue' && <RevenueProvision user={user} />}
+              {activeView === 'revenue' && (
+                  <RevenueProvision 
+                    user={user} 
+                    onQuickAction={handleQuickNewContract}
+                  />
+              )}
               {activeView === 'users' && <UserList />}
           </main>
         </div>

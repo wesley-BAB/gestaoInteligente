@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Contract, ContractType, ContractCategory, ServiceType, User, Client } from '../types';
-import { Eye, Plus, Search, Loader2, FileText, Filter, Users, Pencil } from 'lucide-react';
+import { Eye, Plus, Search, Loader2, FileText, Filter, Users, Pencil, FileSignature } from 'lucide-react';
 import { ContractCalendar } from './ContractCalendar';
 import { useToast } from './ToastContext';
 
 interface ContractListProps {
   user: User;
+  autoOpenModal?: boolean;
+  onModalProcessed?: () => void;
 }
 
-export const ContractList: React.FC<ContractListProps> = ({ user }) => {
+export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal, onModalProcessed }) => {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -74,6 +76,14 @@ export const ContractList: React.FC<ContractListProps> = ({ user }) => {
   useEffect(() => {
     fetchData();
   }, [user.id]);
+
+  // Handle Auto Open Modal (from Home/Revenue FAB)
+  useEffect(() => {
+      if (autoOpenModal) {
+          handleNewRegister();
+          if (onModalProcessed) onModalProcessed();
+      }
+  }, [autoOpenModal]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -163,15 +173,19 @@ export const ContractList: React.FC<ContractListProps> = ({ user }) => {
   }
 
   return (
-    <div className="w-full max-w-[1600px] animate-fade-in">
+    <div className="w-full max-w-[1600px] animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-gray-800 tracking-tight">Contratos & Avulsos</h2>
+          <h2 className="text-3xl font-bold text-gray-800 tracking-tight flex items-center gap-3">
+            <FileSignature className="w-8 h-8 text-primary-600" />
+            Contratos & Avulsos
+          </h2>
           <p className="text-gray-500 mt-1">Gerencie seus contratos recorrentes e serviços pontuais.</p>
         </div>
+        {/* Desktop Button - Hidden in favor of FAB */}
         <button
           onClick={handleNewRegister}
-          className="bg-primary-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all flex items-center gap-2 font-bold hover:-translate-y-0.5"
+          className="hidden bg-primary-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all items-center gap-2 font-bold hover:-translate-y-0.5"
         >
           <Plus className="w-5 h-5" />
           Novo Registro
@@ -295,6 +309,15 @@ export const ContractList: React.FC<ContractListProps> = ({ user }) => {
           </div>
         </div>
       )}
+
+      {/* Floating Action Button (Visible on all screens) */}
+      <button
+        onClick={handleNewRegister}
+        className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-2xl shadow-primary-600/40 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center"
+        title="Novo Registro"
+      >
+        <Plus className="w-7 h-7" />
+      </button>
 
       {/* Modal - Create or Edit */}
       {isModalOpen && (
