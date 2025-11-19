@@ -1,0 +1,5 @@
+{
+  "name": "WES - Controle de Contratos",
+  "description": "Sistema de gestão de contratos e agendamentos com autenticação personalizada e integração Supabase.",
+  "requestFramePermissions": []
+}
