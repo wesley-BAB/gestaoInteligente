@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { Appointment, User, Contract } from '../types';
 import { format, parseISO, isAfter, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, Clock, DollarSign, ArrowRight, Briefcase, Plus } from 'lucide-react';
+import { Calendar, Clock, DollarSign, ArrowRight, Briefcase, Plus, CheckCircle, Circle } from 'lucide-react';
+import { useToast } from './ToastContext';
 
 interface HomeProps {
   user: User;
@@ -15,54 +16,70 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) =
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
   const [stats, setStats] = useState({ contracts: 0, monthlyRevenue: 0 });
   const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
+
+  const fetchData = async () => {
+    setLoading(true);
+    
+    // Fetch Contracts for stats
+    const { data: contracts } = await supabase
+      .from('tb_contratos')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', true);
+
+    const userContracts = (contracts as Contract[]) || [];
+    
+    const revenue = userContracts.reduce((acc, curr) => {
+       // Simplification: if monthly add value, if annual add value/12
+       return acc + (curr.tipo === 'Mensal' ? Number(curr.valor) : Number(curr.valor) / 12);
+    }, 0);
+
+    setStats({
+      contracts: userContracts.length,
+      monthlyRevenue: revenue
+    });
+
+    // Fetch Appointments linked to user's contracts
+    const { data: appointments } = await supabase
+      .from('tb_agendamentos')
+      .select(`
+          *,
+          contrato:tb_contratos(*)
+      `)
+      .order('data_agendamento', { ascending: true });
+
+    if (appointments) {
+      // Filter client-side for correct user
+      const filtered = appointments.filter((apt: any) => 
+          apt.contrato && apt.contrato.user_id === user.id && 
+          (isAfter(parseISO(apt.data_agendamento), new Date()) || isToday(parseISO(apt.data_agendamento)))
+      ).slice(0, 10); // Take top 10
+      
+      setUpcomingAppointments(filtered);
+    }
+    
+    setLoading(false);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      
-      // Fetch Contracts for stats
-      const { data: contracts } = await supabase
-        .from('tb_contratos')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', true);
-
-      const userContracts = (contracts as Contract[]) || [];
-      
-      const revenue = userContracts.reduce((acc, curr) => {
-         // Simplification: if monthly add value, if annual add value/12
-         return acc + (curr.tipo === 'Mensal' ? Number(curr.valor) : Number(curr.valor) / 12);
-      }, 0);
-
-      setStats({
-        contracts: userContracts.length,
-        monthlyRevenue: revenue
-      });
-
-      // Fetch Appointments linked to user's contracts
-      const { data: appointments } = await supabase
-        .from('tb_agendamentos')
-        .select(`
-            *,
-            contrato:tb_contratos(*)
-        `)
-        .order('data_agendamento', { ascending: true });
-
-      if (appointments) {
-        // Filter client-side for correct user
-        const filtered = appointments.filter((apt: any) => 
-            apt.contrato && apt.contrato.user_id === user.id && 
-            (isAfter(parseISO(apt.data_agendamento), new Date()) || isToday(parseISO(apt.data_agendamento)))
-        ).slice(0, 5); // Take top 5
-        
-        setUpcomingAppointments(filtered);
-      }
-      
-      setLoading(false);
-    };
-
     fetchData();
   }, [user.id]);
+
+  const toggleAppointmentStatus = async (id: number, currentStatus: boolean) => {
+      const newStatus = !currentStatus;
+      const { error } = await supabase
+        .from('tb_agendamentos')
+        .update({ feito: newStatus })
+        .eq('id', id);
+
+      if (!error) {
+          showToast(newStatus ? 'Agendamento concluído!' : 'Agendamento reaberto.', 'success');
+          fetchData(); // Reload to update UI
+      } else {
+          showToast('Erro ao atualizar status.', 'error');
+      }
+  };
 
   return (
     <div className="w-full max-w-[1600px] pb-20">
@@ -117,14 +134,21 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) =
         ) : (
             <div className="divide-y divide-gray-50">
                 {upcomingAppointments.map((apt: any) => (
-                    <div key={apt.id} className="p-4 sm:px-6 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div key={apt.id} className={`p-4 sm:px-6 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${apt.feito ? 'opacity-50 bg-gray-50' : ''}`}>
                         <div className="flex items-start gap-4">
+                            <button 
+                                onClick={() => toggleAppointmentStatus(apt.id, !!apt.feito)}
+                                className={`mt-1 flex-shrink-0 rounded-full p-1 transition-colors ${apt.feito ? 'text-green-500' : 'text-gray-300 hover:text-primary-500'}`}
+                            >
+                                {apt.feito ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
+                            </button>
+
                             <div className="flex flex-col items-center justify-center bg-primary-50 text-primary-700 rounded-xl min-w-[60px] h-[60px]">
                                 <span className="text-xs font-bold uppercase">{format(parseISO(apt.data_agendamento), 'MMM', { locale: ptBR })}</span>
                                 <span className="text-xl font-bold">{format(parseISO(apt.data_agendamento), 'dd')}</span>
                             </div>
                             <div>
-                                <h3 className="font-bold text-gray-800">{apt.contrato?.cliente || 'Cliente Desconhecido'}</h3>
+                                <h3 className={`font-bold text-gray-800 ${apt.feito ? 'line-through text-gray-500' : ''}`}>{apt.contrato?.cliente || 'Cliente Desconhecido'}</h3>
                                 <p className="text-sm text-gray-500">{apt.contrato?.nome_servico} • {apt.contrato?.categoria}</p>
                                 <p className="text-sm text-gray-600 mt-1 bg-gray-100 inline-block px-2 py-0.5 rounded text-xs">{apt.observacao}</p>
                             </div>
@@ -132,6 +156,9 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) =
                         <div className="text-right sm:text-right text-sm text-gray-500">
                              <span className="block font-medium text-primary-600">
                                 {format(parseISO(apt.data_agendamento), 'EEEE', { locale: ptBR })}
+                             </span>
+                             <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded mt-1 inline-block ${apt.feito ? 'bg-green-100 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
+                                {apt.feito ? 'CONCLUÍDO' : 'PENDENTE'}
                              </span>
                         </div>
                     </div>

@@ -51,4 +51,14 @@ export interface Appointment {
   contrato?: Contract; // Join result
   data_agendamento: string; // YYYY-MM-DD or ISO string
   observacao: string;
+  feito?: boolean; // Status done/pending
+}
+
+export interface FinancialRecord {
+  id?: number; // Optional because it might be virtual until saved
+  contrato_id: number;
+  data_vencimento: string;
+  valor: number;
+  status: 'pendente' | 'pago';
+  data_pagamento?: string | null;
 }

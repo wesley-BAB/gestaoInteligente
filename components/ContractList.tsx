@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Contract, ContractType, ContractCategory, ServiceType, User, Client } from '../types';
-import { Eye, Plus, Search, Loader2, FileText, Filter, Users, Pencil, FileSignature } from 'lucide-react';
+import { Contract, ContractType, ContractCategory, ServiceType, User, Client, FinancialRecord } from '../types';
+import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar } from 'lucide-react';
 import { ContractCalendar } from './ContractCalendar';
 import { useToast } from './ToastContext';
+import { addMonths, format, parseISO, isBefore, startOfDay, getDate } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface ContractListProps {
   user: User;
@@ -22,6 +24,12 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
   const [categoryFilter, setCategoryFilter] = useState<string>('todos');
   const { showToast } = useToast();
 
+  // Financial Modal State
+  const [isFinancialModalOpen, setIsFinancialModalOpen] = useState(false);
+  const [financialContract, setFinancialContract] = useState<Contract | null>(null);
+  const [installments, setInstallments] = useState<FinancialRecord[]>([]);
+  const [loadingFinancials, setLoadingFinancials] = useState(false);
+
   // Form State
   const [editingId, setEditingId] = useState<number | null>(null);
   const [newContract, setNewContract] = useState<Partial<Contract>>({
@@ -39,20 +47,17 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
   const fetchData = async () => {
     setLoading(true);
     
-    // Fetch contracts
     const { data: contractsData } = await supabase
       .from('tb_contratos')
       .select('*')
       .eq('user_id', user.id)
       .order('cliente', { ascending: true });
 
-    // Fetch service types
     const { data: typesData } = await supabase
       .from('tb_tipos_servico')
       .select('*')
       .order('nome', { ascending: true });
 
-    // Fetch clients
     const { data: clientsData } = await supabase
       .from('tb_clientes')
       .select('*')
@@ -64,7 +69,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
 
     if (typesData) {
         setServiceTypes(typesData as ServiceType[]);
-        // Only set default service if we are not editing and input is empty
         if(typesData.length > 0 && !newContract.nome_servico && !editingId) {
             setNewContract(prev => ({...prev, nome_servico: typesData[0].nome}));
         }
@@ -77,7 +81,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
     fetchData();
   }, [user.id]);
 
-  // Handle Auto Open Modal (from Home/Revenue FAB)
   useEffect(() => {
       if (autoOpenModal) {
           handleNewRegister();
@@ -128,25 +131,31 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
         return;
     }
 
-    const payload = {
-        ...newContract,
-        user_id: user.id
-    };
+    // Lógica de Correção para Avulso
+    // Se for avulso, preenchemos as datas de vencimento com a mesma data de início
+    // para evitar erro de constraints no banco de dados
+    let finalPayload = { ...newContract, user_id: user.id };
+
+    if (finalPayload.categoria === ContractCategory.AVULSO) {
+        finalPayload.vencimento_contrato = finalPayload.inicio_contrato;
+        // Se inicio_contrato existir, pega o dia, senão dia 1
+        const day = finalPayload.inicio_contrato ? getDate(parseISO(finalPayload.inicio_contrato)) : 1;
+        finalPayload.vencimento_parcela = day;
+        finalPayload.tipo = ContractType.MENSAL; // Valor padrão técnico
+    }
 
     let error;
 
     if (editingId) {
-        // Update existing
         const { error: updateError } = await supabase
             .from('tb_contratos')
-            .update(payload)
+            .update(finalPayload)
             .eq('id', editingId);
         error = updateError;
     } else {
-        // Insert new
         const { error: insertError } = await supabase
             .from('tb_contratos')
-            .insert([payload]);
+            .insert([finalPayload]);
         error = insertError;
     }
 
@@ -159,6 +168,126 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       showToast('Erro ao salvar registro.', 'error');
       console.error(error);
     }
+  };
+
+  // --- Financial Logic ---
+  const handleOpenFinancial = async (contract: Contract) => {
+    setFinancialContract(contract);
+    setIsFinancialModalOpen(true);
+    setLoadingFinancials(true);
+
+    // 1. Fetch existing financial records
+    const { data: existingRecords } = await supabase
+      .from('tb_financeiro')
+      .select('*')
+      .eq('contrato_id', contract.id);
+
+    const dbRecords = (existingRecords as FinancialRecord[]) || [];
+    
+    // 2. Generate virtual installments based on contract
+    const generated: FinancialRecord[] = [];
+    const start = parseISO(contract.inicio_contrato);
+    
+    if (contract.categoria === ContractCategory.AVULSO) {
+        // Avulso: just one installment at start date
+        const exists = dbRecords.find(r => r.data_vencimento === contract.inicio_contrato);
+        if (exists) {
+            generated.push(exists);
+        } else {
+            generated.push({
+                contrato_id: contract.id,
+                data_vencimento: contract.inicio_contrato,
+                valor: contract.valor,
+                status: 'pendente'
+            });
+        }
+    } else {
+        // Recorrente: Generate for next 12 months or until contract end
+        const end = contract.vencimento_contrato ? parseISO(contract.vencimento_contrato) : addMonths(start, 12);
+        // Limit generation to reasonable amount (e.g., 24 months max for view)
+        const limitDate = addMonths(new Date(), 12); 
+        const effectiveEnd = isBefore(end, limitDate) ? end : limitDate;
+
+        let current = start;
+        // Adjust current to match 'vencimento_parcela' day if needed, simplified here to month iteration
+        // We use the day of 'inicio_contrato' or 'vencimento_parcela'
+        const dayOfPayment = contract.vencimento_parcela || 1;
+        
+        // Align current date to the payment day of the starting month
+        // (Logic simplified: Just iterate months from start)
+        let i = 0;
+        while (i < 24) { // Safety break
+             const dateDate = addMonths(start, i);
+             // Set the day
+             const year = dateDate.getFullYear();
+             const month = dateDate.getMonth();
+             // Handle end of month overflow (e.g. 31st Feb)
+             const paymentDate = new Date(year, month, Math.min(dayOfPayment, new Date(year, month + 1, 0).getDate()));
+             
+             const dateStr = format(paymentDate, 'yyyy-MM-dd');
+             
+             if (isBefore(effectiveEnd, paymentDate) && i > 0) break;
+
+             // Check if exists in DB
+             const exists = dbRecords.find(r => r.data_vencimento === dateStr);
+             
+             if (exists) {
+                 generated.push(exists);
+             } else {
+                 generated.push({
+                     contrato_id: contract.id,
+                     data_vencimento: dateStr,
+                     valor: contract.valor,
+                     status: 'pendente'
+                 });
+             }
+             i++;
+             
+             if (contract.vencimento_contrato && isBefore(parseISO(contract.vencimento_contrato), paymentDate)) break;
+        }
+    }
+    
+    // Sort by date
+    generated.sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
+    setInstallments(generated);
+    setLoadingFinancials(false);
+  };
+
+  const handleMarkAsPaid = async (record: FinancialRecord) => {
+      if (record.status === 'pago') return; // Already paid
+
+      const today = new Date().toISOString().split('T')[0];
+      
+      let error;
+
+      if (record.id) {
+          // Update existing
+          const { error: upError } = await supabase
+            .from('tb_financeiro')
+            .update({ status: 'pago', data_pagamento: today })
+            .eq('id', record.id);
+          error = upError;
+      } else {
+          // Insert new as paid
+          const { error: inError } = await supabase
+            .from('tb_financeiro')
+            .insert([{
+                contrato_id: record.contrato_id,
+                data_vencimento: record.data_vencimento,
+                valor: record.valor,
+                status: 'pago',
+                data_pagamento: today
+            }]);
+          error = inError;
+      }
+
+      if (!error) {
+          showToast('Parcela baixada com sucesso!', 'success');
+          if (financialContract) handleOpenFinancial(financialContract); // Reload
+      } else {
+          showToast('Erro ao baixar parcela.', 'error');
+          console.error(error);
+      }
   };
 
   const filteredContracts = contracts.filter(c => {
@@ -182,7 +311,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
           </h2>
           <p className="text-gray-500 mt-1">Gerencie seus contratos recorrentes e serviços pontuais.</p>
         </div>
-        {/* Desktop Button - Hidden in favor of FAB */}
         <button
           onClick={handleNewRegister}
           className="hidden bg-primary-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all items-center gap-2 font-bold hover:-translate-y-0.5"
@@ -286,6 +414,13 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
                             <button 
+                                onClick={() => handleOpenFinancial(contract)}
+                                className="text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 p-2 rounded-lg transition-colors"
+                                title="Financeiro / Baixa de Parcelas"
+                            >
+                                <DollarSign className="w-4 h-4" />
+                            </button>
+                            <button 
                                 onClick={() => handleEdit(contract)}
                                 className="text-gray-500 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 p-2 rounded-lg transition-colors"
                                 title="Editar Registro"
@@ -322,7 +457,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       {/* Modal - Create or Edit */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl my-8 border border-white/20">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl my-8 border border-white/20 animate-slide-up">
             <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
                 <div className="bg-primary-100 p-3 rounded-xl">
                     {editingId ? <Pencil className="w-6 h-6 text-primary-600" /> : <Plus className="w-6 h-6 text-primary-600" />}
@@ -403,7 +538,9 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Data Início/Serviço</label>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                   {newContract.categoria === ContractCategory.AVULSO ? 'Data do Serviço' : 'Início do Contrato'}
+                </label>
                 <input
                   type="date"
                   required
@@ -469,6 +606,81 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+       {/* Financial Modal */}
+       {isFinancialModalOpen && financialContract && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl max-h-[85vh] flex flex-col animate-slide-up">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+              <div>
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                      <DollarSign className="w-6 h-6 text-green-600" />
+                      Gestão Financeira
+                  </h2>
+                  <p className="text-sm text-gray-500">{financialContract.cliente} - {financialContract.nome_servico}</p>
+              </div>
+              <button onClick={() => setIsFinancialModalOpen(false)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500">
+                  <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+               {loadingFinancials ? (
+                   <div className="flex justify-center py-12"><Loader2 className="animate-spin w-8 h-8 text-primary-500"/></div>
+               ) : (
+                   <div className="space-y-1">
+                       {installments.length === 0 ? (
+                           <div className="text-center py-8 text-gray-400">Nenhuma parcela prevista encontrada.</div>
+                       ) : (
+                           <table className="w-full">
+                               <thead className="bg-gray-50 text-left text-xs uppercase font-bold text-gray-500">
+                                   <tr>
+                                       <th className="px-4 py-3 rounded-l-lg">Vencimento</th>
+                                       <th className="px-4 py-3">Valor</th>
+                                       <th className="px-4 py-3">Status</th>
+                                       <th className="px-4 py-3 text-right rounded-r-lg">Ação</th>
+                                   </tr>
+                               </thead>
+                               <tbody className="divide-y divide-gray-50">
+                                   {installments.map((inst, idx) => (
+                                       <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                           <td className="px-4 py-3 text-gray-800 font-medium">
+                                               {format(parseISO(inst.data_vencimento), 'dd/MM/yyyy')}
+                                           </td>
+                                           <td className="px-4 py-3 text-gray-600">
+                                               {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(inst.valor)}
+                                           </td>
+                                           <td className="px-4 py-3">
+                                               <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${inst.status === 'pago' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                   {inst.status}
+                                               </span>
+                                               {inst.data_pagamento && <div className="text-[10px] text-gray-400 mt-1">Pago em: {format(parseISO(inst.data_pagamento), 'dd/MM')}</div>}
+                                           </td>
+                                           <td className="px-4 py-3 text-right">
+                                               {inst.status === 'pendente' ? (
+                                                   <button 
+                                                     onClick={() => handleMarkAsPaid(inst)}
+                                                     className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors font-bold shadow-sm shadow-green-600/20"
+                                                   >
+                                                       Baixar
+                                                   </button>
+                                               ) : (
+                                                   <span className="text-gray-400 text-xs flex items-center justify-end gap-1">
+                                                       <CheckCircle className="w-3 h-3" /> Baixado
+                                                   </span>
+                                               )}
+                                           </td>
+                                       </tr>
+                                   ))}
+                               </tbody>
+                           </table>
+                       )}
+                   </div>
+               )}
+            </div>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, parseISO, addMonths, subMonths, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Trash2, Pencil, CheckCircle, Circle } from 'lucide-react';
 import { Contract, Appointment } from '../types';
 import { supabase } from '../lib/supabase';
 import { useToast } from './ToastContext';
@@ -18,7 +18,8 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { showToast } = useToast();
   
-  // New Appointment State
+  // Form State
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [newDate, setNewDate] = useState('');
   const [newObs, setNewObs] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -42,27 +43,79 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contract.id]);
 
-  const handleAddAppointment = async (e: React.FormEvent) => {
+  const toggleStatus = async (id: number, currentStatus: boolean) => {
+      const { error } = await supabase
+        .from('tb_agendamentos')
+        .update({ feito: !currentStatus })
+        .eq('id', id);
+
+      if(!error) {
+          fetchAppointments();
+          showToast(!currentStatus ? 'Marcado como feito' : 'Marcado como pendente', 'success');
+      }
+  }
+
+  const openNewModal = () => {
+      setEditingId(null);
+      setNewDate('');
+      setNewObs('');
+      setIsModalOpen(true);
+  };
+
+  const openEditModal = (apt: Appointment) => {
+      setEditingId(apt.id);
+      setNewDate(apt.data_agendamento);
+      setNewObs(apt.observacao);
+      setIsModalOpen(true);
+  };
+
+  const handleSaveAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitLoading(true);
     
-    const { error } = await supabase.from('tb_agendamentos').insert([
-      {
-        contrato_id: contract.id,
-        data_agendamento: newDate,
-        observacao: newObs
-      }
-    ]);
+    if (editingId) {
+        // Update existing
+        const { error } = await supabase
+            .from('tb_agendamentos')
+            .update({
+                data_agendamento: newDate,
+                observacao: newObs
+            })
+            .eq('id', editingId);
 
-    if (!error) {
-      setIsModalOpen(false);
-      setNewDate('');
-      setNewObs('');
-      fetchAppointments();
-      showToast('Agendamento criado!', 'success');
+        if (!error) {
+            setIsModalOpen(false);
+            setEditingId(null);
+            setNewDate('');
+            setNewObs('');
+            fetchAppointments();
+            showToast('Agendamento atualizado!', 'success');
+        } else {
+            showToast('Erro ao atualizar agendamento', 'error');
+        }
+
     } else {
-      showToast('Erro ao salvar agendamento', 'error');
+        // Create new
+        const { error } = await supabase.from('tb_agendamentos').insert([
+        {
+            contrato_id: contract.id,
+            data_agendamento: newDate,
+            observacao: newObs,
+            feito: false
+        }
+        ]);
+
+        if (!error) {
+            setIsModalOpen(false);
+            setNewDate('');
+            setNewObs('');
+            fetchAppointments();
+            showToast('Agendamento criado!', 'success');
+        } else {
+            showToast('Erro ao criar agendamento', 'error');
+        }
     }
+    
     setSubmitLoading(false);
   };
 
@@ -72,6 +125,8 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
         if(!error) {
             fetchAppointments();
             showToast('Agendamento excluído.', 'info');
+        } else {
+            showToast('Erro ao excluir.', 'error');
         }
     }
   }
@@ -99,7 +154,7 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
           <p className="text-gray-500">{contract.nome_servico} - {contract.tipo}</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openNewModal}
           className="bg-primary-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-primary-700 transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
@@ -148,14 +203,33 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
                 </div>
                 <div className="space-y-1">
                   {dayAppointments.map(apt => (
-                    <div key={apt.id} className="text-xs p-1.5 bg-primary-100 text-primary-800 rounded border border-primary-200 truncate relative group/apt">
-                      {apt.observacao}
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDelete(apt.id); }}
-                        className="absolute right-1 top-1 hidden group-hover/apt:block text-red-500 hover:text-red-700 bg-white rounded-full p-0.5"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                    <div key={apt.id} className={`text-xs p-1.5 rounded border truncate relative group/apt pr-12 ${apt.feito ? 'bg-gray-100 text-gray-500 line-through border-gray-200' : 'bg-primary-100 text-primary-800 border-primary-200'}`}>
+                      <span title={apt.observacao}>{apt.observacao}</span>
+                      
+                      {/* Actions */}
+                      <div className="absolute right-1 top-1 hidden group-hover/apt:flex gap-1 bg-white/80 rounded p-0.5">
+                         <button 
+                            onClick={(e) => { e.stopPropagation(); toggleStatus(apt.id, !!apt.feito); }}
+                            className={`${apt.feito ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}`}
+                            title="Marcar como feito"
+                          >
+                            {apt.feito ? <CheckCircle className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+                          </button>
+                         <button 
+                            onClick={(e) => { e.stopPropagation(); openEditModal(apt); }}
+                            className="text-primary-600 hover:text-primary-800"
+                            title="Editar"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleDelete(apt.id); }}
+                            className="text-red-500 hover:text-red-700"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -165,15 +239,15 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
         </div>
       </div>
 
-      {/* New Appointment Modal */}
+      {/* New/Edit Appointment Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <CalendarIcon className="w-5 h-5 text-primary-600" />
-              Novo Agendamento
+              {editingId ? 'Editar Agendamento' : 'Novo Agendamento'}
             </h3>
-            <form onSubmit={handleAddAppointment}>
+            <form onSubmit={handleSaveAppointment}>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
@@ -210,7 +284,7 @@ export const ContractCalendar: React.FC<ContractCalendarProps> = ({ contract, on
                   disabled={submitLoading}
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
-                  {submitLoading ? 'Salvando...' : 'Salvar'}
+                  {submitLoading ? 'Salvando...' : (editingId ? 'Atualizar' : 'Salvar')}
                 </button>
               </div>
             </form>
