@@ -82,7 +82,7 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) =
   };
 
   return (
-    <div className="w-full max-w-[1600px] pb-20">
+    <div className="w-[90%] mx-auto pb-20">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-800">Olá, {user.username}</h1>
         <p className="text-gray-500 mt-1">Aqui está o resumo da sua gestão hoje.</p>
@@ -143,9 +143,10 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) =
                                 {apt.feito ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
                             </button>
 
-                            <div className="flex flex-col items-center justify-center bg-primary-50 text-primary-700 rounded-xl min-w-[60px] h-[60px]">
-                                <span className="text-xs font-bold uppercase">{format(parseISO(apt.data_agendamento), 'MMM', { locale: ptBR })}</span>
-                                <span className="text-xl font-bold">{format(parseISO(apt.data_agendamento), 'dd')}</span>
+                            <div className="flex flex-col items-center justify-center bg-primary-50 text-primary-700 rounded-xl min-w-[65px] h-[65px] px-1">
+                                <span className="text-xs font-bold uppercase leading-none mb-1">{format(parseISO(apt.data_agendamento), 'MMM', { locale: ptBR })}</span>
+                                <span className="text-xl font-bold leading-none">{format(parseISO(apt.data_agendamento), 'dd')}</span>
+                                <span className="text-[10px] text-primary-600 font-medium leading-none mt-1">{format(parseISO(apt.data_agendamento), 'yyyy')}</span>
                             </div>
                             <div>
                                 <h3 className={`font-bold text-gray-800 ${apt.feito ? 'line-through text-gray-500' : ''}`}>{apt.contrato?.cliente || 'Cliente Desconhecido'}</h3>

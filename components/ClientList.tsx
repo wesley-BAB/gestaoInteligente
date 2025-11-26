@@ -74,7 +74,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
   );
 
   return (
-    <div className="w-full max-w-[1400px] animate-fade-in pb-20">
+    <div className="w-[90%] mx-auto animate-fade-in pb-20">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
           <h2 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
