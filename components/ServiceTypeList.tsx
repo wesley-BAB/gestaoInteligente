@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { ServiceType, User } from '../types';
-import { Plus, Trash2, Settings, Loader2, X, Tag } from 'lucide-react';
+import { Plus, Trash2, Settings, Loader2, X, Tag, Pencil } from 'lucide-react';
 import { useToast } from './ToastContext';
 
 interface ServiceTypeListProps {
@@ -14,6 +14,7 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const { showToast } = useToast();
 
   const fetchTypes = async () => {
@@ -34,21 +35,46 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
     fetchTypes();
   }, [user.id]);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleOpenModal = (type?: ServiceType) => {
+      if (type) {
+          setEditingId(type.id);
+          setNewName(type.nome);
+      } else {
+          setEditingId(null);
+          setNewName('');
+      }
+      setIsModalOpen(true);
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
     setIsSubmitting(true);
 
-    const { error } = await supabase.from('tb_tipos_servico').insert([{ 
-        nome: newName,
-        user_id: user.id
-    }]);
+    let error;
+    
+    if (editingId) {
+        const { error: updateError } = await supabase
+            .from('tb_tipos_servico')
+            .update({ nome: newName })
+            .eq('id', editingId);
+        error = updateError;
+    } else {
+        const { error: insertError } = await supabase
+            .from('tb_tipos_servico')
+            .insert([{ 
+                nome: newName,
+                user_id: user.id
+            }]);
+        error = insertError;
+    }
     
     if (!error) {
       setNewName('');
       setIsModalOpen(false);
+      setEditingId(null);
       fetchTypes();
-      showToast('Tipo de serviço adicionado!', 'success');
+      showToast(editingId ? 'Tipo de serviço atualizado!' : 'Tipo de serviço adicionado!', 'success');
     } else {
       showToast('Erro ao salvar. Talvez esse nome já exista?', 'error');
     }
@@ -78,7 +104,7 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
           <p className="text-gray-500 mt-1">Gerencie as categorias de serviços oferecidos.</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => handleOpenModal()}
           className="hidden bg-primary-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all items-center gap-2 font-bold hover:-translate-y-0.5"
         >
           <Plus className="w-5 h-5" />
@@ -112,13 +138,22 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                                        <button 
-                                            onClick={() => handleDelete(type.id)}
-                                            className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-all"
-                                            title="Excluir tipo"
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button 
+                                                onClick={() => handleOpenModal(type)}
+                                                className="text-gray-400 hover:text-primary-500 p-2 rounded-lg hover:bg-primary-50 transition-all"
+                                                title="Editar tipo"
+                                            >
+                                                <Pencil className="w-5 h-5" />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(type.id)}
+                                                className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-all"
+                                                title="Excluir tipo"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -130,7 +165,7 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
 
          {/* Floating Action Button (Visible on all screens) */}
         <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => handleOpenModal()}
             className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-2xl shadow-primary-600/40 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center"
             title="Novo Tipo"
         >
@@ -150,12 +185,12 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
                     
                     <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
                         <div className="bg-primary-100 p-2 rounded-lg">
-                            <Plus className="w-6 h-6 text-primary-600" />
+                            {editingId ? <Pencil className="w-6 h-6 text-primary-600" /> : <Plus className="w-6 h-6 text-primary-600" />}
                         </div>
-                        Novo Tipo de Serviço
+                        {editingId ? 'Editar Tipo' : 'Novo Tipo de Serviço'}
                     </h3>
                     
-                    <form onSubmit={handleAdd} className="space-y-5">
+                    <form onSubmit={handleSave} className="space-y-5">
                         <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Nome do Serviço</label>
                             <input 
@@ -180,7 +215,7 @@ export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
                                 disabled={isSubmitting}
                                 className="flex-1 bg-primary-600 text-white py-3.5 rounded-xl hover:bg-primary-700 transition-colors flex justify-center items-center gap-2 font-medium"
                             >
-                                {isSubmitting ? <Loader2 className="animate-spin w-5 h-5"/> : 'Salvar'}
+                                {isSubmitting ? <Loader2 className="animate-spin w-5 h-5"/> : (editingId ? 'Atualizar' : 'Salvar')}
                             </button>
                         </div>
                     </form>

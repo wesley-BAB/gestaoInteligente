@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Contract, ContractType, ContractCategory, ServiceType, User, Client, FinancialRecord } from '../types';
-import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar, Trash2 } from 'lucide-react';
+import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar, Trash2, RotateCcw } from 'lucide-react';
 import { ContractCalendar } from './ContractCalendar';
 import { useToast } from './ToastContext';
 import { addMonths, addWeeks, format, parseISO, isBefore, startOfDay, getDate } from 'date-fns';
@@ -270,37 +270,44 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
     setLoadingFinancials(false);
   };
 
-  const handleMarkAsPaid = async (record: FinancialRecord) => {
-      if (record.status === 'pago') return;
-
+  const toggleFinancialStatus = async (record: FinancialRecord, newStatus: 'pago' | 'pendente') => {
       const today = new Date().toISOString().split('T')[0];
-      
       let error;
 
       if (record.id) {
+          // Update existing
+          // IMPORTANT: Explicitly set data_pagamento to null when reverting to pending
+          const payload = newStatus === 'pago' 
+             ? { status: 'pago', data_pagamento: today }
+             : { status: 'pendente', data_pagamento: null };
+
           const { error: upError } = await supabase
             .from('tb_financeiro')
-            .update({ status: 'pago', data_pagamento: today })
+            .update(payload)
             .eq('id', record.id);
           error = upError;
       } else {
-          const { error: inError } = await supabase
-            .from('tb_financeiro')
-            .insert([{
-                contrato_id: record.contrato_id,
-                data_vencimento: record.data_vencimento,
-                valor: record.valor,
-                status: 'pago',
-                data_pagamento: today
-            }]);
-          error = inError;
+          // Insert new (only happens when we are marking a virtual one as paid)
+          // Virtual ones are always pending, so we only insert if status is 'pago'
+          if (newStatus === 'pago') {
+              const { error: inError } = await supabase
+                .from('tb_financeiro')
+                .insert([{
+                    contrato_id: record.contrato_id,
+                    data_vencimento: record.data_vencimento,
+                    valor: record.valor,
+                    status: 'pago',
+                    data_pagamento: today
+                }]);
+              error = inError;
+          }
       }
 
       if (!error) {
-          showToast('Parcela baixada com sucesso!', 'success');
-          if (financialContract) handleOpenFinancial(financialContract); // Reload
+          showToast(newStatus === 'pago' ? 'Parcela baixada!' : 'Parcela reaberta!', 'success');
+          if (financialContract) handleOpenFinancial(financialContract); // Reload to reflect changes
       } else {
-          showToast('Erro ao baixar parcela.', 'error');
+          showToast('Erro ao atualizar parcela.', 'error');
           console.error(error);
       }
   };
@@ -688,15 +695,24 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                                            <td className="px-4 py-3 text-right">
                                                {inst.status === 'pendente' ? (
                                                    <button 
-                                                     onClick={() => handleMarkAsPaid(inst)}
+                                                     onClick={() => toggleFinancialStatus(inst, 'pago')}
                                                      className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors font-bold shadow-sm shadow-green-600/20"
                                                    >
                                                        Baixar
                                                    </button>
                                                ) : (
-                                                   <span className="text-gray-400 text-xs flex items-center justify-end gap-1">
-                                                       <CheckCircle className="w-3 h-3" /> Baixado
-                                                   </span>
+                                                   <div className="flex items-center justify-end gap-2">
+                                                       <span className="text-gray-400 text-xs flex items-center gap-1">
+                                                           <CheckCircle className="w-3 h-3" /> Baixado
+                                                       </span>
+                                                       <button 
+                                                           onClick={() => toggleFinancialStatus(inst, 'pendente')}
+                                                           className="text-xs text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition-colors"
+                                                           title="Desfazer baixa (marcar como não pago)"
+                                                       >
+                                                           <RotateCcw className="w-4 h-4" />
+                                                       </button>
+                                                   </div>
                                                )}
                                            </td>
                                        </tr>

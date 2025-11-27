@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Client, User } from '../types';
-import { Plus, Trash2, Users, Loader2, Phone, Mail, Search, X } from 'lucide-react';
+import { Plus, Trash2, Users, Loader2, Phone, Mail, Search, X, Pencil } from 'lucide-react';
 import { useToast } from './ToastContext';
 
 interface ClientListProps {
@@ -15,6 +15,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
   const [newClient, setNewClient] = useState<Partial<Client>>({ nome: '', email: '', telefone: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
   const { showToast } = useToast();
 
   const fetchClients = async () => {
@@ -37,19 +38,46 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
     fetchClients();
   }, [user.id]);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleOpenModal = (client?: Client) => {
+      if (client) {
+          setEditingId(client.id);
+          setNewClient({ nome: client.nome, email: client.email, telefone: client.telefone });
+      } else {
+          setEditingId(null);
+          setNewClient({ nome: '', email: '', telefone: '' });
+      }
+      setIsModalOpen(true);
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClient.nome?.trim()) return;
     setIsSubmitting(true);
 
     const payload = { ...newClient, user_id: user.id };
-    const { error } = await supabase.from('tb_clientes').insert([payload]);
+    let error;
+
+    if (editingId) {
+        // Update
+        const { error: updateError } = await supabase
+            .from('tb_clientes')
+            .update(payload)
+            .eq('id', editingId);
+        error = updateError;
+    } else {
+        // Insert
+        const { error: insertError } = await supabase
+            .from('tb_clientes')
+            .insert([payload]);
+        error = insertError;
+    }
     
     if (!error) {
       setNewClient({ nome: '', email: '', telefone: '' });
       setIsModalOpen(false);
+      setEditingId(null);
       fetchClients();
-      showToast('Cliente cadastrado com sucesso!', 'success');
+      showToast(editingId ? 'Cliente atualizado!' : 'Cliente cadastrado!', 'success');
     } else {
       showToast('Erro ao salvar cliente. Verifique os dados.', 'error');
     }
@@ -84,7 +112,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
           <p className="text-gray-500 mt-1">Gerencie sua carteira de clientes.</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => handleOpenModal()}
           className="hidden bg-primary-600 text-white px-5 py-2.5 rounded-xl shadow-lg shadow-primary-600/20 hover:bg-primary-700 transition-all items-center gap-2 font-bold hover:-translate-y-0.5"
         >
           <Plus className="w-5 h-5" />
@@ -147,13 +175,22 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
                                     ) : <span className="text-gray-300 text-sm">-</span>}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                                    <button 
-                                        onClick={() => handleDelete(client.id)}
-                                        className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-all"
-                                        title="Excluir cliente"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
+                                    <div className="flex items-center justify-end gap-2">
+                                        <button 
+                                            onClick={() => handleOpenModal(client)}
+                                            className="text-gray-400 hover:text-primary-500 p-2 rounded-lg hover:bg-primary-50 transition-all"
+                                            title="Editar cliente"
+                                        >
+                                            <Pencil className="w-5 h-5" />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDelete(client.id)}
+                                            className="text-gray-400 hover:text-red-500 p-2 rounded-lg hover:bg-red-50 transition-all"
+                                            title="Excluir cliente"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -165,7 +202,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
 
       {/* Floating Action Button (Visible on all screens) */}
       <button
-        onClick={() => setIsModalOpen(true)}
+        onClick={() => handleOpenModal()}
         className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-2xl shadow-primary-600/40 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center"
         title="Novo Cliente"
       >
@@ -185,12 +222,12 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
                 
                 <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
                     <div className="bg-primary-100 p-2 rounded-lg">
-                        <Plus className="w-6 h-6 text-primary-600" />
+                        {editingId ? <Pencil className="w-6 h-6 text-primary-600" /> : <Plus className="w-6 h-6 text-primary-600" />}
                     </div>
-                    Novo Cliente
+                    {editingId ? 'Editar Cliente' : 'Novo Cliente'}
                 </h3>
                 
-                <form onSubmit={handleAdd} className="space-y-5">
+                <form onSubmit={handleSave} className="space-y-5">
                     <div>
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Nome Completo</label>
                         <input 
@@ -235,7 +272,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
                             disabled={isSubmitting}
                             className="flex-1 bg-primary-600 text-white py-3.5 rounded-xl hover:bg-primary-700 transition-colors flex justify-center items-center gap-2 font-bold shadow-lg shadow-primary-600/20"
                         >
-                            {isSubmitting ? <Loader2 className="animate-spin w-5 h-5"/> : 'Salvar Cliente'}
+                            {isSubmitting ? <Loader2 className="animate-spin w-5 h-5"/> : (editingId ? 'Atualizar' : 'Salvar')}
                         </button>
                     </div>
                 </form>
