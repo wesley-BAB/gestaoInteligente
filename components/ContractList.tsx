@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Contract, ContractType, ContractCategory, ServiceType, User, Client, FinancialRecord } from '../types';
-import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar } from 'lucide-react';
+import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar, Trash2 } from 'lucide-react';
 import { ContractCalendar } from './ContractCalendar';
 import { useToast } from './ToastContext';
-import { addMonths, format, parseISO, isBefore, startOfDay, getDate } from 'date-fns';
+import { addMonths, addWeeks, format, parseISO, isBefore, startOfDay, getDate } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface ContractListProps {
@@ -53,9 +53,11 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       .eq('user_id', user.id)
       .order('cliente', { ascending: true });
 
+    // Fetch types filtering by user
     const { data: typesData } = await supabase
       .from('tb_tipos_servico')
       .select('*')
+      .eq('user_id', user.id)
       .order('nome', { ascending: true });
 
     const { data: clientsData } = await supabase
@@ -124,6 +126,23 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       setIsModalOpen(true);
   };
 
+  const handleDelete = async (id: number) => {
+      if (confirm('Tem certeza que deseja excluir este contrato? Todos os agendamentos e registros financeiros vinculados também serão excluídos.')) {
+          const { error } = await supabase
+              .from('tb_contratos')
+              .delete()
+              .eq('id', id);
+
+          if (!error) {
+              fetchData();
+              showToast('Contrato excluído com sucesso.', 'info');
+          } else {
+              showToast('Erro ao excluir contrato.', 'error');
+              console.error(error);
+          }
+      }
+  };
+
   const handleSaveContract = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newContract.cliente) {
@@ -132,16 +151,13 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
     }
 
     // Lógica de Correção para Avulso
-    // Se for avulso, preenchemos as datas de vencimento com a mesma data de início
-    // para evitar erro de constraints no banco de dados
     let finalPayload = { ...newContract, user_id: user.id };
 
     if (finalPayload.categoria === ContractCategory.AVULSO) {
         finalPayload.vencimento_contrato = finalPayload.inicio_contrato;
-        // Se inicio_contrato existir, pega o dia, senão dia 1
         const day = finalPayload.inicio_contrato ? getDate(parseISO(finalPayload.inicio_contrato)) : 1;
         finalPayload.vencimento_parcela = day;
-        finalPayload.tipo = ContractType.MENSAL; // Valor padrão técnico
+        finalPayload.tipo = ContractType.MENSAL; // Default technical value
     }
 
     let error;
@@ -189,7 +205,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
     const start = parseISO(contract.inicio_contrato);
     
     if (contract.categoria === ContractCategory.AVULSO) {
-        // Avulso: just one installment at start date
         const exists = dbRecords.find(r => r.data_vencimento === contract.inicio_contrato);
         if (exists) {
             generated.push(exists);
@@ -202,31 +217,35 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
             });
         }
     } else {
-        // Recorrente: Generate for next 12 months or until contract end
+        // Recorrente: Generate for next period
         const end = contract.vencimento_contrato ? parseISO(contract.vencimento_contrato) : addMonths(start, 12);
         // Limit generation to reasonable amount (e.g., 24 months max for view)
-        const limitDate = addMonths(new Date(), 12); 
+        const limitDate = addMonths(new Date(), 24); 
         const effectiveEnd = isBefore(end, limitDate) ? end : limitDate;
 
-        let current = start;
-        // Adjust current to match 'vencimento_parcela' day if needed, simplified here to month iteration
-        // We use the day of 'inicio_contrato' or 'vencimento_parcela'
         const dayOfPayment = contract.vencimento_parcela || 1;
         
-        // Align current date to the payment day of the starting month
-        // (Logic simplified: Just iterate months from start)
         let i = 0;
-        while (i < 24) { // Safety break
-             const dateDate = addMonths(start, i);
-             // Set the day
-             const year = dateDate.getFullYear();
-             const month = dateDate.getMonth();
-             // Handle end of month overflow (e.g. 31st Feb)
-             const paymentDate = new Date(year, month, Math.min(dayOfPayment, new Date(year, month + 1, 0).getDate()));
-             
-             const dateStr = format(paymentDate, 'yyyy-MM-dd');
+        let currentDate = start;
+        const maxIterations = contract.tipo === ContractType.SEMANAL ? 104 : 24; // 2 years approx
+
+        while (i < maxIterations) {
+             let paymentDate = currentDate;
+
+             if (contract.tipo === ContractType.MENSAL || contract.tipo === ContractType.ANUAL) {
+                 const dateDate = contract.tipo === ContractType.MENSAL ? addMonths(start, i) : addMonths(start, i * 12);
+                 const year = dateDate.getFullYear();
+                 const month = dateDate.getMonth();
+                 paymentDate = new Date(year, month, Math.min(dayOfPayment, new Date(year, month + 1, 0).getDate()));
+             } else if (contract.tipo === ContractType.SEMANAL) {
+                 // For weekly, we just add weeks from start
+                 paymentDate = addWeeks(start, i);
+             }
              
              if (isBefore(effectiveEnd, paymentDate) && i > 0) break;
+             if (contract.vencimento_contrato && isBefore(parseISO(contract.vencimento_contrato), paymentDate)) break;
+
+             const dateStr = format(paymentDate, 'yyyy-MM-dd');
 
              // Check if exists in DB
              const exists = dbRecords.find(r => r.data_vencimento === dateStr);
@@ -242,8 +261,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                  });
              }
              i++;
-             
-             if (contract.vencimento_contrato && isBefore(parseISO(contract.vencimento_contrato), paymentDate)) break;
         }
     }
     
@@ -254,21 +271,19 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
   };
 
   const handleMarkAsPaid = async (record: FinancialRecord) => {
-      if (record.status === 'pago') return; // Already paid
+      if (record.status === 'pago') return;
 
       const today = new Date().toISOString().split('T')[0];
       
       let error;
 
       if (record.id) {
-          // Update existing
           const { error: upError } = await supabase
             .from('tb_financeiro')
             .update({ status: 'pago', data_pagamento: today })
             .eq('id', record.id);
           error = upError;
       } else {
-          // Insert new as paid
           const { error: inError } = await supabase
             .from('tb_financeiro')
             .insert([{
@@ -434,6 +449,13 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                             >
                                 <Eye className="w-5 h-5" />
                             </button>
+                            <button 
+                                onClick={() => handleDelete(contract.id)}
+                                className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors"
+                                title="Excluir Contrato"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
                         </div>
                       </td>
                     </tr>
@@ -521,7 +543,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                         ))}
                     </select>
                 ) : (
-                    <div className="text-red-500 text-sm mb-2">Nenhum tipo de serviço cadastrado.</div>
+                    <div className="text-red-500 text-sm mb-2">Nenhum tipo de serviço cadastrado para seu usuário.</div>
                 )}
               </div>
 
@@ -564,13 +586,16 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Dia Venc. Parcela</label>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            {newContract.tipo === ContractType.SEMANAL ? 'Dia da Semana (Ignorado)' : 'Dia Venc. Parcela'}
+                        </label>
                         <input
                         type="number"
                         min="1"
                         max="31"
-                        required
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                        required={newContract.tipo !== ContractType.SEMANAL}
+                        disabled={newContract.tipo === ContractType.SEMANAL}
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all disabled:opacity-50"
                         value={newContract.vencimento_parcela}
                         onChange={(e) => setNewContract({...newContract, vencimento_parcela: parseInt(e.target.value)})}
                         />
@@ -584,6 +609,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                         onChange={(e) => setNewContract({...newContract, tipo: e.target.value as ContractType})}
                         >
                         <option value={ContractType.MENSAL}>Mensal</option>
+                        <option value={ContractType.SEMANAL}>Semanal</option>
                         <option value={ContractType.ANUAL}>Anual</option>
                         </select>
                     </div>

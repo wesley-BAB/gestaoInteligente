@@ -1,7 +1,7 @@
 import React from 'react';
-import { LogOut, FileText, User, Settings, PieChart, Home, X, Pin, PinOff, Users, FileSignature } from 'lucide-react';
+import { LogOut, FileText, User, Settings, PieChart, Home, X, Pin, PinOff, Users, FileSignature, UserCog } from 'lucide-react';
 
-export type ViewType = 'home' | 'contracts' | 'clients' | 'users' | 'service-types' | 'revenue';
+export type ViewType = 'home' | 'contracts' | 'clients' | 'users' | 'service-types' | 'revenue' | 'profile';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -103,6 +103,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
           <button onClick={() => { onChangeView('users'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('users')} title="Usuários">
             <User className="w-6 h-6 min-w-[1.5rem] shrink-0" />
             <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Usuários do Sistema</span>
+          </button>
+
+          <hr className="border-gray-100 my-2" />
+          
+          <button onClick={() => { onChangeView('profile'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('profile')} title="Minha Conta">
+            <UserCog className="w-6 h-6 min-w-[1.5rem] shrink-0" />
+            <span className={`transition-opacity duration-200 delay-75 ${getTextClass()}`}>Minha Conta</span>
           </button>
         </nav>
 

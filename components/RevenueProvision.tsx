@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Contract, ContractType, ContractCategory, User } from '../types';
-import { addMonths, addYears, format, parseISO, isBefore, isAfter, isSameDay, startOfMonth, endOfMonth } from 'date-fns';
+import { addMonths, addYears, addWeeks, format, parseISO, isBefore, isAfter, isSameDay, startOfMonth, endOfMonth } from 'date-fns';
 import { TrendingUp, Loader2, Calendar, Plus, Filter } from 'lucide-react';
 
 interface RevenueProps {
@@ -38,15 +38,12 @@ export const RevenueProvision: React.FC<RevenueProps> = ({ user, onQuickAction }
       const items: ProvisionItem[] = [];
       const startRange = parseISO(startDate);
       const endRange = parseISO(endDate);
-      // Set endRange to end of day to include matches
       endRange.setHours(23, 59, 59, 999);
 
       contracts.forEach(contract => {
           const contractStart = parseISO(contract.inicio_contrato);
           
           if (contract.categoria === ContractCategory.AVULSO) {
-              // Avulso: Single date check
-              // We check if contractStart is within range
               if ((isAfter(contractStart, startRange) || isSameDay(contractStart, startRange)) && 
                   (isBefore(contractStart, endRange) || isSameDay(contractStart, endRange))) {
                   
@@ -61,19 +58,20 @@ export const RevenueProvision: React.FC<RevenueProps> = ({ user, onQuickAction }
                   });
               }
           } else {
-              // Recorrente: Generate occurrences
-              const contractEnd = contract.vencimento_contrato ? parseISO(contract.vencimento_contrato) : addYears(new Date(), 5); // Limit infinite
+              // Recorrente
+              const contractEnd = contract.vencimento_contrato ? parseISO(contract.vencimento_contrato) : addYears(new Date(), 5);
               
               let currentPaymentDate = contractStart;
-              // Adjust start based on pay day if needed, simplified to start date loop
               
-              // We loop from contract start until we pass the range end or pass contract end
+              // Simple iteration based on frequency
+              // To avoid infinite loops, we can also bound by endRange (since we only care about data inside the range)
+              // But we need to find the FIRST occurrence inside or before range to start adding correctly.
+              // For simplicity in this demo, we loop from start of contract until end of selection range.
+              
               while (isBefore(currentPaymentDate, endRange) || isSameDay(currentPaymentDate, endRange)) {
                   
-                  // If current payment date is AFTER contract end, stop
                   if (contract.vencimento_contrato && isAfter(currentPaymentDate, contractEnd)) break;
 
-                  // Check if current payment date is inside the selection range
                   if ((isAfter(currentPaymentDate, startRange) || isSameDay(currentPaymentDate, startRange)) &&
                       (isBefore(currentPaymentDate, endRange) || isSameDay(currentPaymentDate, endRange))) {
                       
@@ -88,17 +86,17 @@ export const RevenueProvision: React.FC<RevenueProps> = ({ user, onQuickAction }
                     });
                   }
 
-                  // Increment date based on periodicity
                   if (contract.tipo === ContractType.MENSAL) {
                       currentPaymentDate = addMonths(currentPaymentDate, 1);
-                  } else {
+                  } else if (contract.tipo === ContractType.ANUAL) {
                       currentPaymentDate = addYears(currentPaymentDate, 1);
+                  } else if (contract.tipo === ContractType.SEMANAL) {
+                      currentPaymentDate = addWeeks(currentPaymentDate, 1);
                   }
               }
           }
       });
 
-      // Sort by date
       items.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       setProvisionItems(items);

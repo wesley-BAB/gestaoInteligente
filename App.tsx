@@ -7,6 +7,7 @@ import { ServiceTypeList } from './components/ServiceTypeList';
 import { RevenueProvision } from './components/RevenueProvision';
 import { UserList } from './components/UserList';
 import { Home } from './components/Home';
+import { Profile } from './components/Profile';
 import { ToastProvider } from './components/ToastContext';
 import { User } from './types';
 import { Menu } from 'lucide-react';
@@ -48,6 +49,11 @@ const App: React.FC = () => {
     setUser(loggedInUser);
     localStorage.setItem(SESSION_KEY, JSON.stringify(loggedInUser));
   };
+
+  const handleUpdateUserSession = (updatedUser: User) => {
+      setUser(updatedUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
+  }
 
   const handleLogout = () => {
     setUser(null);
@@ -121,7 +127,7 @@ const App: React.FC = () => {
                   />
               )}
               {activeView === 'clients' && <ClientList user={user} />}
-              {activeView === 'service-types' && <ServiceTypeList />}
+              {activeView === 'service-types' && <ServiceTypeList user={user} />}
               {activeView === 'revenue' && (
                   <RevenueProvision 
                     user={user} 
@@ -129,6 +135,9 @@ const App: React.FC = () => {
                   />
               )}
               {activeView === 'users' && <UserList />}
+              {activeView === 'profile' && (
+                  <Profile user={user} onUpdateUser={handleUpdateUserSession} />
+              )}
           </main>
         </div>
       </div>

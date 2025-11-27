@@ -15,7 +15,8 @@ export interface Client {
 
 export enum ContractType {
   MENSAL = 'Mensal',
-  ANUAL = 'Anual'
+  ANUAL = 'Anual',
+  SEMANAL = 'Semanal'
 }
 
 export enum ContractCategory {
@@ -27,6 +28,7 @@ export interface ServiceType {
   id: number;
   created_at?: string;
   nome: string;
+  user_id?: number;
 }
 
 export interface Contract {

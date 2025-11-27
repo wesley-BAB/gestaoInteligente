@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { ServiceType } from '../types';
+import { ServiceType, User } from '../types';
 import { Plus, Trash2, Settings, Loader2, X, Tag } from 'lucide-react';
 import { useToast } from './ToastContext';
 
-export const ServiceTypeList: React.FC = () => {
+interface ServiceTypeListProps {
+    user: User;
+}
+
+export const ServiceTypeList: React.FC<ServiceTypeListProps> = ({ user }) => {
   const [types, setTypes] = useState<ServiceType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,6 +21,7 @@ export const ServiceTypeList: React.FC = () => {
     const { data, error } = await supabase
       .from('tb_tipos_servico')
       .select('*')
+      .eq('user_id', user.id)
       .order('nome', { ascending: true });
 
     if (!error && data) {
@@ -27,14 +32,17 @@ export const ServiceTypeList: React.FC = () => {
 
   useEffect(() => {
     fetchTypes();
-  }, []);
+  }, [user.id]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
     setIsSubmitting(true);
 
-    const { error } = await supabase.from('tb_tipos_servico').insert([{ nome: newName }]);
+    const { error } = await supabase.from('tb_tipos_servico').insert([{ 
+        nome: newName,
+        user_id: user.id
+    }]);
     
     if (!error) {
       setNewName('');
@@ -82,7 +90,7 @@ export const ServiceTypeList: React.FC = () => {
             {loading ? (
                 <div className="p-12 text-center"><Loader2 className="animate-spin w-8 h-8 text-primary-500 mx-auto"/></div>
             ) : types.length === 0 ? (
-                <div className="p-12 text-center text-gray-500">Nenhum tipo cadastrado.</div>
+                <div className="p-12 text-center text-gray-500">Nenhum tipo cadastrado para seu usuário.</div>
             ) : (
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-100">
