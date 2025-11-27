@@ -11,6 +11,7 @@ export interface Client {
   email?: string;
   telefone?: string;
   user_id: number;
+  ativo?: boolean; // Status active/inactive
 }
 
 export enum ContractType {

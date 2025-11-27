@@ -524,7 +524,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                             onChange={(e) => setNewContract({...newContract, cliente: e.target.value})}
                         >
                             <option value="">Selecione um cliente...</option>
-                            {clients.map(c => (
+                            {clients.filter(c => c.ativo !== false).map(c => (
                                 <option key={c.id} value={c.nome}>{c.nome}</option>
                             ))}
                         </select>

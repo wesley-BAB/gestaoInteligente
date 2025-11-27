@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Appointment, User, Contract } from '../types';
 import { format, parseISO, isAfter, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Calendar, Clock, DollarSign, ArrowRight, Briefcase, Plus, CheckCircle, Circle } from 'lucide-react';
+import { Calendar, Clock, ArrowRight, Briefcase, Plus, CheckCircle, Circle, Users } from 'lucide-react';
 import { useToast } from './ToastContext';
 
 interface HomeProps {
@@ -14,30 +14,30 @@ interface HomeProps {
 
 export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) => {
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
-  const [stats, setStats] = useState({ contracts: 0, monthlyRevenue: 0 });
+  const [stats, setStats] = useState({ contracts: 0, activeClients: 0 });
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
 
   const fetchData = async () => {
     setLoading(true);
     
-    // Fetch Contracts for stats
-    const { data: contracts } = await supabase
+    // Fetch Contracts count
+    const { count: contractsCount } = await supabase
       .from('tb_contratos')
-      .select('*')
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('status', true);
 
-    const userContracts = (contracts as Contract[]) || [];
-    
-    const revenue = userContracts.reduce((acc, curr) => {
-       // Simplification: if monthly add value, if annual add value/12
-       return acc + (curr.tipo === 'Mensal' ? Number(curr.valor) : Number(curr.valor) / 12);
-    }, 0);
+    // Fetch Active Clients count
+    const { count: clientsCount } = await supabase
+      .from('tb_clientes')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('ativo', true);
 
     setStats({
-      contracts: userContracts.length,
-      monthlyRevenue: revenue
+      contracts: contractsCount || 0,
+      activeClients: clientsCount || 0
     });
 
     // Fetch Appointments linked to user's contracts
@@ -101,14 +101,12 @@ export const Home: React.FC<HomeProps> = ({ user, onNavigate, onQuickAction }) =
         </div>
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-            <div className="bg-green-50 p-3 rounded-xl text-green-600">
-                <DollarSign className="w-6 h-6" />
+            <div className="bg-purple-50 p-3 rounded-xl text-purple-600">
+                <Users className="w-6 h-6" />
             </div>
             <div>
-                <p className="text-sm text-gray-500 font-medium">Receita Mensal Est.</p>
-                <p className="text-2xl font-bold text-gray-800">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(stats.monthlyRevenue)}
-                </p>
+                <p className="text-sm text-gray-500 font-medium">Clientes Ativos</p>
+                <p className="text-2xl font-bold text-gray-800">{stats.activeClients}</p>
             </div>
         </div>
       </div>

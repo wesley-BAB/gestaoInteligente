@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Client, User } from '../types';
-import { Plus, Trash2, Users, Loader2, Phone, Mail, Search, X, Pencil } from 'lucide-react';
+import { Plus, Trash2, Users, Loader2, Phone, Mail, Search, X, Pencil, Power } from 'lucide-react';
 import { useToast } from './ToastContext';
 
 interface ClientListProps {
@@ -12,7 +12,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newClient, setNewClient] = useState<Partial<Client>>({ nome: '', email: '', telefone: '' });
+  const [newClient, setNewClient] = useState<Partial<Client>>({ nome: '', email: '', telefone: '', ativo: true });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -41,10 +41,10 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
   const handleOpenModal = (client?: Client) => {
       if (client) {
           setEditingId(client.id);
-          setNewClient({ nome: client.nome, email: client.email, telefone: client.telefone });
+          setNewClient({ nome: client.nome, email: client.email, telefone: client.telefone, ativo: client.ativo });
       } else {
           setEditingId(null);
-          setNewClient({ nome: '', email: '', telefone: '' });
+          setNewClient({ nome: '', email: '', telefone: '', ativo: true });
       }
       setIsModalOpen(true);
   }
@@ -73,7 +73,7 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
     }
     
     if (!error) {
-      setNewClient({ nome: '', email: '', telefone: '' });
+      setNewClient({ nome: '', email: '', telefone: '', ativo: true });
       setIsModalOpen(false);
       setEditingId(null);
       fetchClients();
@@ -84,8 +84,23 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
     setIsSubmitting(false);
   };
 
+  const handleToggleStatus = async (client: Client) => {
+      const newStatus = !client.ativo;
+      const { error } = await supabase
+        .from('tb_clientes')
+        .update({ ativo: newStatus })
+        .eq('id', client.id);
+
+      if (!error) {
+          fetchClients();
+          showToast(newStatus ? 'Cliente ativado.' : 'Cliente inativado.', 'info');
+      } else {
+          showToast('Erro ao alterar status.', 'error');
+      }
+  };
+
   const handleDelete = async (id: number) => {
-    if (confirm('Deseja excluir este cliente?')) {
+    if (confirm('Deseja realmente excluir este cliente permanentemente? Isso pode afetar contratos existentes.')) {
       const { error } = await supabase.from('tb_clientes').delete().eq('id', id);
       if (!error) {
         fetchClients();
@@ -156,9 +171,12 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-100">
                         {filteredClients.map(client => (
-                            <tr key={client.id} className="hover:bg-gray-50/80 transition-colors group">
+                            <tr key={client.id} className={`hover:bg-gray-50/80 transition-colors group ${client.ativo === false ? 'opacity-50 bg-gray-50' : ''}`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="font-bold text-gray-800">{client.nome}</div>
+                                    <div className="font-bold text-gray-800 flex items-center gap-2">
+                                        {client.nome}
+                                        {client.ativo === false && <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-bold uppercase">Inativo</span>}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     {client.email ? (
@@ -176,6 +194,13 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right">
                                     <div className="flex items-center justify-end gap-2">
+                                        <button 
+                                            onClick={() => handleToggleStatus(client)}
+                                            className={`p-2 rounded-lg transition-all ${client.ativo !== false ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-200'}`}
+                                            title={client.ativo !== false ? "Inativar cliente" : "Ativar cliente"}
+                                        >
+                                            <Power className="w-5 h-5" />
+                                        </button>
                                         <button 
                                             onClick={() => handleOpenModal(client)}
                                             className="text-gray-400 hover:text-primary-500 p-2 rounded-lg hover:bg-primary-50 transition-all"
@@ -259,6 +284,18 @@ export const ClientList: React.FC<ClientListProps> = ({ user }) => {
                             className="w-full rounded-xl border border-gray-300 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-500 outline-none transition-all"
                         />
                     </div>
+                    
+                    <div className="flex items-center gap-2 mt-2">
+                        <label className="text-sm font-medium text-gray-700">Status:</label>
+                        <button
+                            type="button"
+                            onClick={() => setNewClient({...newClient, ativo: !newClient.ativo})}
+                            className={`px-3 py-1 rounded text-xs font-bold uppercase transition-colors ${newClient.ativo !== false ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}
+                        >
+                            {newClient.ativo !== false ? 'Ativo' : 'Inativo'}
+                        </button>
+                    </div>
+
                     <div className="pt-4 flex gap-3">
                         <button 
                             type="button"
