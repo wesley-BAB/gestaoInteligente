@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Contract, ContractType, ContractCategory, ServiceType, User, Client, FinancialRecord } from '../types';
-import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar, Trash2, RotateCcw } from 'lucide-react';
+import { Eye, Plus, Search, Loader2, FileText, Users, Pencil, FileSignature, DollarSign, CheckCircle, X, Calendar, Trash2, RotateCcw, User as UserIcon } from 'lucide-react';
 import { ContractCalendar } from './ContractCalendar';
 import { useToast } from './ToastContext';
 import { addMonths, addWeeks, format, parseISO, isBefore, startOfDay, getDate } from 'date-fns';
@@ -53,7 +53,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       .eq('user_id', user.id)
       .order('cliente', { ascending: true });
 
-    // Fetch types filtering by user
     const { data: typesData } = await supabase
       .from('tb_tipos_servico')
       .select('*')
@@ -146,18 +145,17 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
   const handleSaveContract = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newContract.cliente) {
-        showToast('Por favor, selecione um cliente.', 'error');
+        showToast('Por favor, informe o nome do cliente.', 'error');
         return;
     }
 
-    // Lógica de Correção para Avulso
     let finalPayload = { ...newContract, user_id: user.id };
 
     if (finalPayload.categoria === ContractCategory.AVULSO) {
         finalPayload.vencimento_contrato = finalPayload.inicio_contrato;
         const day = finalPayload.inicio_contrato ? getDate(parseISO(finalPayload.inicio_contrato)) : 1;
         finalPayload.vencimento_parcela = day;
-        finalPayload.tipo = ContractType.MENSAL; // Default technical value
+        finalPayload.tipo = ContractType.MENSAL;
     }
 
     let error;
@@ -179,28 +177,24 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       setIsModalOpen(false);
       resetForm();
       fetchData();
-      showToast(editingId ? 'Registro atualizado!' : 'Contrato salvo com sucesso!', 'success');
+      showToast(editingId ? 'Registro atualizado!' : 'Registro salvo com sucesso!', 'success');
     } else {
       showToast('Erro ao salvar registro.', 'error');
       console.error(error);
     }
   };
 
-  // --- Financial Logic ---
   const handleOpenFinancial = async (contract: Contract) => {
     setFinancialContract(contract);
     setIsFinancialModalOpen(true);
     setLoadingFinancials(true);
 
-    // 1. Fetch existing financial records
     const { data: existingRecords } = await supabase
       .from('tb_financeiro')
       .select('*')
       .eq('contrato_id', contract.id);
 
     const dbRecords = (existingRecords as FinancialRecord[]) || [];
-    
-    // 2. Generate virtual installments based on contract
     const generated: FinancialRecord[] = [];
     const start = parseISO(contract.inicio_contrato);
     
@@ -217,20 +211,16 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
             });
         }
     } else {
-        // Recorrente: Generate for next period
         const end = contract.vencimento_contrato ? parseISO(contract.vencimento_contrato) : addMonths(start, 12);
-        // Limit generation to reasonable amount (e.g., 24 months max for view)
         const limitDate = addMonths(new Date(), 24); 
         const effectiveEnd = isBefore(end, limitDate) ? end : limitDate;
-
         const dayOfPayment = contract.vencimento_parcela || 1;
         
         let i = 0;
-        let currentDate = start;
-        const maxIterations = contract.tipo === ContractType.SEMANAL ? 104 : 24; // 2 years approx
+        const maxIterations = contract.tipo === ContractType.SEMANAL ? 104 : 24;
 
         while (i < maxIterations) {
-             let paymentDate = currentDate;
+             let paymentDate = start;
 
              if (contract.tipo === ContractType.MENSAL || contract.tipo === ContractType.ANUAL) {
                  const dateDate = contract.tipo === ContractType.MENSAL ? addMonths(start, i) : addMonths(start, i * 12);
@@ -238,7 +228,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                  const month = dateDate.getMonth();
                  paymentDate = new Date(year, month, Math.min(dayOfPayment, new Date(year, month + 1, 0).getDate()));
              } else if (contract.tipo === ContractType.SEMANAL) {
-                 // For weekly, we just add weeks from start
                  paymentDate = addWeeks(start, i);
              }
              
@@ -246,8 +235,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
              if (contract.vencimento_contrato && isBefore(parseISO(contract.vencimento_contrato), paymentDate)) break;
 
              const dateStr = format(paymentDate, 'yyyy-MM-dd');
-
-             // Check if exists in DB
              const exists = dbRecords.find(r => r.data_vencimento === dateStr);
              
              if (exists) {
@@ -264,7 +251,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
         }
     }
     
-    // Sort by date
     generated.sort((a, b) => new Date(a.data_vencimento).getTime() - new Date(b.data_vencimento).getTime());
     setInstallments(generated);
     setLoadingFinancials(false);
@@ -275,8 +261,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
       let error;
 
       if (record.id) {
-          // Update existing
-          // IMPORTANT: Explicitly set data_pagamento to null when reverting to pending
           const payload = newStatus === 'pago' 
              ? { status: 'pago', data_pagamento: today }
              : { status: 'pendente', data_pagamento: null };
@@ -287,8 +271,6 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
             .eq('id', record.id);
           error = upError;
       } else {
-          // Insert new (only happens when we are marking a virtual one as paid)
-          // Virtual ones are always pending, so we only insert if status is 'pago'
           if (newStatus === 'pago') {
               const { error: inError } = await supabase
                 .from('tb_financeiro')
@@ -305,10 +287,9 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
 
       if (!error) {
           showToast(newStatus === 'pago' ? 'Parcela baixada!' : 'Parcela reaberta!', 'success');
-          if (financialContract) handleOpenFinancial(financialContract); // Reload to reflect changes
+          if (financialContract) handleOpenFinancial(financialContract);
       } else {
           showToast('Erro ao atualizar parcela.', 'error');
-          console.error(error);
       }
   };
 
@@ -474,7 +455,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
         </div>
       )}
 
-      {/* Floating Action Button (Visible on all screens) */}
+      {/* Floating Action Button */}
       <button
         onClick={handleNewRegister}
         className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-2xl shadow-primary-600/40 hover:bg-primary-700 hover:scale-105 active:scale-95 transition-all z-20 flex items-center justify-center"
@@ -496,44 +477,69 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
             <form onSubmit={handleSaveContract} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Category Selector */}
-              <div className="md:col-span-2 p-1 bg-gray-100 rounded-xl flex">
+              <div className="md:col-span-2 p-1.5 bg-gray-100 rounded-2xl flex">
                  <button
                     type="button"
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${newContract.categoria === ContractCategory.RECORRENTE ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    onClick={() => setNewContract({...newContract, categoria: ContractCategory.RECORRENTE})}
+                    className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${newContract.categoria === ContractCategory.RECORRENTE ? 'bg-white text-gray-800 shadow-sm scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => {
+                      setNewContract({...newContract, categoria: ContractCategory.RECORRENTE});
+                      if (!editingId) setNewContract(prev => ({...prev, cliente: ''}));
+                    }}
                  >
                     Contrato Recorrente
                  </button>
                  <button
                     type="button"
-                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${newContract.categoria === ContractCategory.AVULSO ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                    onClick={() => setNewContract({...newContract, categoria: ContractCategory.AVULSO})}
+                    className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all ${newContract.categoria === ContractCategory.AVULSO ? 'bg-white text-gray-800 shadow-sm scale-[1.02]' : 'text-gray-500 hover:text-gray-700'}`}
+                    onClick={() => {
+                      setNewContract({...newContract, categoria: ContractCategory.AVULSO});
+                      if (!editingId) setNewContract(prev => ({...prev, cliente: ''}));
+                    }}
                  >
                     Serviço Avulso
                  </button>
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Cliente</label>
-                {clients.length > 0 ? (
-                     <div className="relative">
-                        <select
-                            required
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all appearance-none"
-                            value={newContract.cliente}
-                            onChange={(e) => setNewContract({...newContract, cliente: e.target.value})}
-                        >
-                            <option value="">Selecione um cliente...</option>
-                            {clients.filter(c => c.ativo !== false).map(c => (
-                                <option key={c.id} value={c.nome}>{c.nome}</option>
-                            ))}
-                        </select>
-                        <Users className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                     </div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                  Cliente {newContract.categoria === ContractCategory.AVULSO ? '(Digite o nome)' : '(Selecione da lista)'}
+                </label>
+                
+                {newContract.categoria === ContractCategory.AVULSO ? (
+                  /* Campo de Texto para Avulsos */
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Nome do cliente eventual..."
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                      value={newContract.cliente}
+                      onChange={(e) => setNewContract({...newContract, cliente: e.target.value})}
+                    />
+                    <UserIcon className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
                 ) : (
-                    <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
-                        Você precisa cadastrar clientes primeiro na aba "Meus Clientes".
-                    </div>
+                  /* Campo Select para Recorrentes (apenas ativos) */
+                  clients.length > 0 ? (
+                       <div className="relative">
+                          <select
+                              required
+                              className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all appearance-none"
+                              value={newContract.cliente}
+                              onChange={(e) => setNewContract({...newContract, cliente: e.target.value})}
+                          >
+                              <option value="">Selecione um cliente...</option>
+                              {clients.filter(c => c.ativo !== false).map(c => (
+                                  <option key={c.id} value={c.nome}>{c.nome}</option>
+                              ))}
+                          </select>
+                          <Users className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                       </div>
+                  ) : (
+                      <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-sm">
+                          Você precisa cadastrar clientes primeiro na aba "Meus Clientes".
+                      </div>
+                  )
                 )}
               </div>
 
@@ -541,7 +547,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Tipo de Serviço</label>
                 {serviceTypes.length > 0 ? (
                     <select
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
                         value={newContract.nome_servico}
                         onChange={(e) => setNewContract({...newContract, nome_servico: e.target.value})}
                     >
@@ -550,7 +556,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                         ))}
                     </select>
                 ) : (
-                    <div className="text-red-500 text-sm mb-2">Nenhum tipo de serviço cadastrado para seu usuário.</div>
+                    <div className="text-red-500 text-sm mb-2">Nenhum tipo de serviço cadastrado.</div>
                 )}
               </div>
 
@@ -560,7 +566,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                   type="number"
                   step="0.01"
                   required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
                   value={newContract.valor}
                   onChange={(e) => setNewContract({...newContract, valor: parseFloat(e.target.value)})}
                 />
@@ -573,7 +579,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                 <input
                   type="date"
                   required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
                   value={newContract.inicio_contrato}
                   onChange={(e) => setNewContract({...newContract, inicio_contrato: e.target.value})}
                 />
@@ -586,7 +592,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                         <input
                         type="date"
                         required
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
                         value={newContract.vencimento_contrato}
                         onChange={(e) => setNewContract({...newContract, vencimento_contrato: e.target.value})}
                         />
@@ -602,7 +608,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                         max="31"
                         required={newContract.tipo !== ContractType.SEMANAL}
                         disabled={newContract.tipo === ContractType.SEMANAL}
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all disabled:opacity-50"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all disabled:opacity-50"
                         value={newContract.vencimento_parcela}
                         onChange={(e) => setNewContract({...newContract, vencimento_parcela: parseInt(e.target.value)})}
                         />
@@ -611,7 +617,7 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                     <div className="md:col-span-2">
                         <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Periodicidade</label>
                         <select
-                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
+                        className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3.5 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none transition-all"
                         value={newContract.tipo}
                         onChange={(e) => setNewContract({...newContract, tipo: e.target.value as ContractType})}
                         >
@@ -623,19 +629,19 @@ export const ContractList: React.FC<ContractListProps> = ({ user, autoOpenModal,
                   </>
               )}
                
-              <div className="md:col-span-2 mt-4 flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <div className="md:col-span-2 mt-4 flex gap-3 pt-6 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-6 py-3 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors font-bold"
+                  className="flex-1 px-6 py-4 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-all font-bold"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors shadow-lg shadow-primary-600/20 font-bold"
+                  className="flex-1 px-6 py-4 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/20 font-bold"
                 >
-                  {editingId ? 'Atualizar' : 'Salvar'}
+                  {editingId ? 'Atualizar' : 'Salvar Registro'}
                 </button>
               </div>
             </form>

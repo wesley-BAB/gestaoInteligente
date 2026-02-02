@@ -1,7 +1,8 @@
+
 export interface User {
   id: number;
   username: string;
-  password?: string; // Optional for update payloads
+  password?: string;
 }
 
 export interface Client {
@@ -11,7 +12,7 @@ export interface Client {
   email?: string;
   telefone?: string;
   user_id: number;
-  ativo?: boolean; // Status active/inactive
+  ativo?: boolean;
 }
 
 export enum ContractType {
@@ -25,6 +26,12 @@ export enum ContractCategory {
   AVULSO = 'Avulso'
 }
 
+export enum FinancialType {
+  RECEITA = 'Receita',
+  DESPESA = 'Despesa',
+  INVESTIMENTO = 'Investimento'
+}
+
 export interface ServiceType {
   id: number;
   created_at?: string;
@@ -34,31 +41,32 @@ export interface ServiceType {
 
 export interface Contract {
   id: number;
-  user_id: number; // Owner of the contract
+  user_id: number;
   created_at?: string;
   cliente: string;
-  inicio_contrato: string; // YYYY-MM-DD
-  vencimento_contrato: string; // YYYY-MM-DD
+  inicio_contrato: string;
+  vencimento_contrato: string;
   valor: number;
   nome_servico: string;
-  vencimento_parcela: number; // Day of month
+  vencimento_parcela: number;
   tipo: ContractType;
-  categoria: ContractCategory; // New field
-  status?: boolean; // true = active
+  categoria: ContractCategory;
+  status?: boolean;
+  tipo_financeiro: FinancialType; // Novo campo
 }
 
 export interface Appointment {
   id: number;
   created_at?: string;
   contrato_id: number;
-  contrato?: Contract; // Join result
-  data_agendamento: string; // YYYY-MM-DD or ISO string
+  contrato?: Contract;
+  data_agendamento: string;
   observacao: string;
-  feito?: boolean; // Status done/pending
+  feito?: boolean;
 }
 
 export interface FinancialRecord {
-  id?: number; // Optional because it might be virtual until saved
+  id?: number;
   contrato_id: number;
   data_vencimento: string;
   valor: number;

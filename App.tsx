@@ -9,6 +9,7 @@ import { UserList } from './components/UserList';
 import { Home } from './components/Home';
 import { Profile } from './components/Profile';
 import { ToastProvider } from './components/ToastContext';
+import { QuickActionModal } from './components/QuickActionModal';
 import { User } from './types';
 import { Menu } from 'lucide-react';
 
@@ -22,8 +23,9 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
   
-  // State to handle "Quick Add" from Home or Revenue screens
-  const [autoOpenContractModal, setAutoOpenContractModal] = useState(false);
+  // Quick Action Modal State
+  const [isQuickActionOpen, setIsQuickActionOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const storedSession = localStorage.getItem(SESSION_KEY);
@@ -66,10 +68,8 @@ const App: React.FC = () => {
       localStorage.setItem(SIDEBAR_PIN_KEY, String(newState));
   }
 
-  // Function used by Home and Revenue screens to go to Contracts and open Modal
-  const handleQuickNewContract = () => {
-      setActiveView('contracts');
-      setAutoOpenContractModal(true);
+  const handleQuickActionSuccess = () => {
+      setRefreshKey(prev => prev + 1); // Trigger refresh in child components
   }
 
   if (initializing) {
@@ -83,7 +83,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Use ToastProvider to wrap everything, including login to show errors nicely
   const MainContent = () => {
     if (!user) {
       return <Login onLoginSuccess={handleLogin} />;
@@ -101,9 +100,7 @@ const App: React.FC = () => {
           onTogglePin={togglePin}
         />
         
-        {/* Main Content Wrapper - Adjusted margin based on pin state */}
         <div className={`flex-1 flex flex-col w-full transition-all duration-300 ${isSidebarPinned ? 'md:ml-64' : 'md:ml-20'}`}>
-          {/* Mobile Header */}
           <div className="md:hidden bg-white p-4 flex items-center justify-between border-b border-gray-100 sticky top-0 z-20">
               <h1 className="font-bold text-gray-800">WES</h1>
               <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg">
@@ -114,24 +111,25 @@ const App: React.FC = () => {
           <main className="flex-1 p-4 md:p-8">
               {activeView === 'home' && (
                   <Home 
+                    key={`home-${refreshKey}`}
                     user={user} 
                     onNavigate={setActiveView} 
-                    onQuickAction={handleQuickNewContract} 
+                    onQuickAction={() => setIsQuickActionOpen(true)} 
                   />
               )}
               {activeView === 'contracts' && (
                   <ContractList 
+                    key={`contracts-${refreshKey}`}
                     user={user} 
-                    autoOpenModal={autoOpenContractModal}
-                    onModalProcessed={() => setAutoOpenContractModal(false)}
                   />
               )}
               {activeView === 'clients' && <ClientList user={user} />}
               {activeView === 'service-types' && <ServiceTypeList user={user} />}
               {activeView === 'revenue' && (
                   <RevenueProvision 
+                    key={`revenue-${refreshKey}`}
                     user={user} 
-                    onQuickAction={handleQuickNewContract}
+                    onQuickAction={() => setIsQuickActionOpen(true)}
                   />
               )}
               {activeView === 'users' && <UserList />}
@@ -140,6 +138,14 @@ const App: React.FC = () => {
               )}
           </main>
         </div>
+
+        {/* Centralized Quick Action Modal */}
+        <QuickActionModal 
+          user={user}
+          isOpen={isQuickActionOpen}
+          onClose={() => setIsQuickActionOpen(false)}
+          onSuccess={handleQuickActionSuccess}
+        />
       </div>
     );
   }
