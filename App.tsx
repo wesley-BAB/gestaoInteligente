@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Login } from './components/Login';
 import { Sidebar, ViewType } from './components/Sidebar';
@@ -8,6 +9,7 @@ import { RevenueProvision } from './components/RevenueProvision';
 import { UserList } from './components/UserList';
 import { Home } from './components/Home';
 import { Profile } from './components/Profile';
+import { NotesList } from './components/NotesList';
 import { ToastProvider } from './components/ToastContext';
 import { QuickActionModal } from './components/QuickActionModal';
 import { User } from './types';
@@ -122,6 +124,12 @@ const App: React.FC = () => {
                     key={`contracts-${refreshKey}`}
                     user={user} 
                   />
+              )}
+              {activeView === 'notes' && (
+                <NotesList 
+                  key={`notes-${refreshKey}`}
+                  user={user} 
+                />
               )}
               {activeView === 'clients' && <ClientList user={user} />}
               {activeView === 'service-types' && <ServiceTypeList user={user} />}

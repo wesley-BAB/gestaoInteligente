@@ -1,8 +1,8 @@
 
 import React from 'react';
-import { LogOut, FileText, User, Settings, PieChart, Home, X, Pin, PinOff, Users, FileSignature, UserCog, Landmark } from 'lucide-react';
+import { LogOut, FileText, User, Settings, PieChart, Home, X, Pin, PinOff, Users, Landmark, NotebookPen } from 'lucide-react';
 
-export type ViewType = 'home' | 'contracts' | 'clients' | 'users' | 'service-types' | 'revenue' | 'profile';
+export type ViewType = 'home' | 'contracts' | 'notes' | 'clients' | 'users' | 'service-types' | 'revenue' | 'profile';
 
 interface SidebarProps {
   onLogout: () => void;
@@ -76,6 +76,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
             <span className={`transition-all duration-300 ${getTextClass()}`}>Transações</span>
           </button>
 
+          <button onClick={() => { onChangeView('notes'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('notes')}>
+            <NotebookPen className="w-6 h-6 min-w-[1.5rem] shrink-0" />
+            <span className={`transition-all duration-300 ${getTextClass()}`}>Anotações</span>
+          </button>
+
           <button onClick={() => { onChangeView('revenue'); if(window.innerWidth < 768) toggle(); }} className={navItemClass('revenue')}>
             <PieChart className="w-6 h-6 min-w-[1.5rem] shrink-0" />
             <span className={`transition-all duration-300 ${getTextClass()}`}>Relatório Geral</span>
@@ -98,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onLogout, activeView, onChange
         </nav>
 
         <div className="p-3 border-t border-gray-50 mt-auto">
-          <button onClick={onLogout} className="w-full flex items-center gap-4 px-4 py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-black uppercase text-[10px]">
+          <button onLogout={onLogout} className="w-full flex items-center gap-4 px-4 py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all font-black uppercase text-[10px]">
             <LogOut className="w-6 h-6 min-w-[1.5rem] shrink-0" />
             <span className={`transition-all duration-300 ${getTextClass()}`}>Encerrar</span>
           </button>

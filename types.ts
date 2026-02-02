@@ -52,7 +52,7 @@ export interface Contract {
   tipo: ContractType;
   categoria: ContractCategory;
   status?: boolean;
-  tipo_financeiro: FinancialType; // Novo campo
+  tipo_financeiro: FinancialType;
 }
 
 export interface Appointment {
@@ -60,8 +60,8 @@ export interface Appointment {
   created_at?: string;
   contrato_id: number;
   contrato?: Contract;
-  data_agendamento: string;
-  observacao: string;
+  data_agendamento: string; // Mantido nome da coluna para compatibilidade com DB
+  observacao: string; // Mantido nome da coluna para compatibilidade com DB
   feito?: boolean;
 }
 
